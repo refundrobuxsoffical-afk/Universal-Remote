@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0b10">
+<title>Universal WiFi TV Remote</title>
+<style>
+  :root{
+    --bg:#0a0b10;--card:#14161f;--card2:#1b1e29;--line:#282c3a;
+    --txt:#e9ebf3;--dim:#8a90a6;--acc:#7c5cff;--accd:#5a3fd6;--ok:#25d0a0;--bad:#ff5a72;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{max-width:520px;margin:0 auto;padding:14px 12px 48px}
+  .row{display:flex;gap:8px;align-items:center}
+  .col{display:flex;flex-direction:column;gap:8px}
+  h1{font-size:16px;margin:0;font-weight:700}
+  .sub{font-size:12px;color:var(--dim)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-top:12px}
+  label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  select,input{width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--line);
+    border-radius:10px;padding:10px 12px;font-size:15px;outline:none;appearance:none}
+  select:focus,input:focus{border-color:var(--acc)}
+  button{background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:12px;
+    padding:12px 10px;font-size:14px;font-weight:600;cursor:pointer;user-select:none;
+    transition:transform .06s,background .15s,border-color .15s}
+  button:active{transform:scale(.96);background:#242938}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.primary:active{background:var(--accd)}
+  button.ghost{background:transparent}
+  button:disabled{opacity:.45}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+  .pad button{aspect-ratio:1/1;font-size:20px;display:flex;align-items:center;justify-content:center}
+  .pad .ok{background:var(--acc);border-color:var(--acc);font-size:14px;border-radius:50%}
+  .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+  .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+  .g5 button{padding:10px 4px;font-size:14px}
+  .pill{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .pill.on{color:var(--ok);border-color:#1c4a3c;background:#0f2a22}
+  .pill.off{color:var(--bad);border-color:#4a1c24;background:#2a0f14}
+  #log{font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);
+    background:#0e1017;border:1px solid var(--line);border-radius:12px;padding:10px;
+    max-height:150px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin-top:8px}
+  .hidden{display:none!important}
+  .note{font-size:12px;color:var(--dim);margin-top:8px}
+  .banner{background:#2a1f0e;border:1px solid #5a4416;color:#ffd48a;border-radius:12px;
+    padding:10px;font-size:12.5px;margin-top:10px}
+  .banner b{color:#ffe6b0}
+  details summary{cursor:pointer;font-size:13px;color:var(--dim);font-weight:600}
+  details p{font-size:12.5px;color:var(--dim);margin:8px 0 0}
+  code{background:#0e1017;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:11.5px}
+</style>
+</head>
+<body>
+
+<h1>Universal TV Remote</h1>
+<div class="sub">Same Wi-Fi required · works in your phone browser</div>
+
+<div class="card">
+  <div class="row">
+    <span id="statusPill" class="pill off">not connected</span>
+    <span class="sub" id="devLabel">no device</span>
+    <span style="flex:1"></span>
+    <button id="forgetBtn" class="ghost" style="padding:4px 10px;font-size:12px">forget</button>
+  </div>
+
+  <div class="col" style="margin-top:10px">
+    <div><label>TV brand / OS</label><select id="brand"></select></div>
+    <div><label id="ipLabel">TV IP address</label><input id="ip" inputmode="decimal" autocomplete="off" placeholder="192.168.1.42"></div>
+    <div id="extraWrap" class="hidden"><label id="extraLabel">extra</label><input id="extra" autocomplete="off" placeholder=""></div>
+    <div class="row">
+      <button id="scanBtn" class="ghost" style="flex:1">Find my TV</button>
+      <button id="connectBtn" class="primary" style="flex:1">Connect</button>
+    </div>
+  </div>
+
+  <div id="banner" class="banner hidden"></div>
+  <div class="note" id="brandNote"></div>
+
+  <details style="margin-top:10px">
+    <summary>Setup notes per brand</summary>
+    <p><b>Samsung:</b> a "Allow connection?" popup appears on the TV — press Allow.</p>
+    <p><b>LG webOS:</b> accept the pairing prompt on screen.</p>
+    <p><b>Roku / Roku TV:</b> enable Settings ▸ System ▸ Advanced ▸ Control by mobile apps ▸ "Network access" = Enabled. Volume works on Roku <i>TVs</i> only.</p>
+    <p><b>Amazon Fire TV:</b> Fire TV talks raw TCP, which a browser can't reach. Run <code>node firetv-bridge.js &lt;TV-IP&gt;</code> on a computer on the same Wi-Fi, then enter the TV IP and that computer's IP. Power needs HDMI-CEC enabled on the TV.</p>
+    <p><b>Sony BRAVIA:</b> Settings ▸ Network ▸ Home network ▸ IP control ▸ Authentication → "Normal and Pre-Shared Key", then enter that key below.</p>
+    <p><b>Vizio SmartCast:</b> open <code>https://TV-IP:7345</code> in this browser once and accept the certificate, then Connect — the TV shows a 4-digit PIN.</p>
+    <p><b>Panasonic:</b> enable "Network control" / VIERA remote in the TV's network menu. Basic support.</p>
+  </details>
+</div>
+
+<div id="remote" class="card hidden">
+  <div class="g3">
+    <button data-k="POWER" style="color:#ff6b6b">Power</button>
+    <button data-k="SOURCE">Source</button>
+    <button data-k="SETTINGS">Menu</button>
+  </div>
+
+  <div class="pad">
+    <button data-k="HOME">⌂</button><button data-k="UP">▲</button><button data-k="MENU">☰</button>
+    <button data-k="LEFT">◀</button><button data-k="OK" class="ok">OK</button><button data-k="RIGHT">▶</button>
+    <button data-k="BACK">↩</button><button data-k="DOWN">▼</button><button data-k="EXIT">✕</button>
+  </div>
+
+  <div class="g3" style="margin-top:10px">
+    <button data-k="VOLUP">VOL +</button><button data-k="MUTE">MUTE</button><button data-k="CHUP">CH +</button>
+    <button data-k="VOLDOWN">VOL −</button><button data-k="INFO">INFO</button><button data-k="CHDOWN">CH −</button>
+  </div>
+
+  <div class="g4" style="margin-top:10px">
+    <button data-k="REW">⏪</button><button data-k="PLAY">▶︎</button><button data-k="PAUSE">⏸</button><button data-k="FF">⏩</button>
+  </div>
+
+  <div class="g5">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="4">4</button><button data-k="5">5</button>
+    <button data-k="6">6</button><button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button data-k="0">0</button>
+  </div>
+
+  <div class="g4" style="margin-top:10px">
+    <button data-k="NETFLIX" style="color:#ff5c5c">Netflix</button>
+    <button data-k="YOUTUBE" style="color:#ff5c5c">YouTube</button>
+    <button data-k="PRIME">Prime</button>
+    <button data-k="DISNEY">Disney+</button>
+  </div>
+
+  <div class="g3" style="margin-top:8px">
+    <button data-k="RED" style="color:#ff6b6b">●</button>
+    <button data-k="GREEN" style="color:#51d88a">●</button>
+    <button data-k="YELLOW" style="color:#ffd166">●</button>
+  </div>
+
+  <div class="row" style="margin-top:10px">
+    <input id="txt" placeholder="Type text to send to the TV">
+    <button id="sendTxt" class="primary" style="flex:0 0 auto;padding:12px 16px">Send</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <strong style="font-size:13px">Connection log</strong><span style="flex:1"></span>
+    <button id="clearLog" class="ghost" style="padding:4px 10px;font-size:12px">clear</button>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script>
+/* =====================================================================
+   Universal WiFi TV Remote — single file, no dependencies, no build step.
+   Talks to TVs directly from the browser over the local network.
+   Fire TV additionally needs firetv-bridge.js running on the LAN.
+   ===================================================================== */
+
+/* ---------------------------- tiny utils ---------------------------- */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const logBox = $('#log');
+function log(...a) {
+  const d = document.createElement('div');
+  d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + a.join(' ');
+  logBox.appendChild(d);
+  logBox.scrollTop = logBox.scrollHeight;
+  while (logBox.children.length > 150) logBox.firstChild.remove();
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const b64   = s => btoa(String.fromCharCode.apply(null, new TextEncoder().encode(s)));
+const tokKey = (b, ip) => `uvr.tok.${b}.${ip}`;
+function buzz(ms = 10) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+function openWs(url, timeout = 7000) {
+  return new Promise((res, rej) => {
+    let settled = false, ws;
+    try { ws = new WebSocket(url); } catch (e) { return rej(e); }
+    const t = setTimeout(() => { if (!settled) { settled = true; try { ws.close(); } catch (e) {} rej(new Error('timeout')); } }, timeout);
+    ws.onopen  = () => { if (settled) return; settled = true; clearTimeout(t); res(ws); };
+    ws.onerror = () => { if (settled) return; settled = true; clearTimeout(t); rej(new Error('socket error')); };
+    ws.onclose = () => { if (settled) return; settled = true; clearTimeout(t); rej(new Error('socket closed')); };
+  });
+}
+
+/* --------------------------- port probes ---------------------------- */
+function probeWs(ip, port, ms = 900) {
+  return new Promise(res => {
+    let ws, done = false;
+    const fin = v => { if (done) return; done = true; clearTimeout(t); try { ws && ws.close(); } catch (e) {} res(v); };
+    const t = setTimeout(() => fin(false), ms);
+    try { ws = new WebSocket(`ws://${ip}:${port}/`); } catch (e) { return fin(false); }
+    ws.onopen = () => fin(true);
+    ws.onerror = () => fin(false);
+  });
+}
+function probeHttp(ip, port, ms = 900, scheme = 'http') {
+  return new Promise(res => {
+    const c = new AbortController();
+    const t = setTimeout(() => { c.abort(); res(false); }, ms);
+    fetch(`${scheme}://${ip}:${port}/`, { mode: 'no-cors', signal: c.signal, cache: 'no-store' })
+      .then(() => { clearTimeout(t); res(true); })
+      .catch(() => { clearTimeout(t); res(false); });
+  });
+}
+/* probe a driver's port(s) — used by the scanner */
+async function probeDevice(ip, d, ms = 700) {
+  const ports = d.probePorts || [d.port];
+  const scheme = d.probe === 'https' ? 'https' : 'http';
+  const hits = await Promise.all(ports.map(p =>
+    d.probe === 'ws' ? probeWs(ip, p, ms) : probeHttp(ip, p, ms, scheme)));
+  return hits.some(Boolean);
+}
+async function pMap(items, fn, limit = 24) {
+  const out = new Array(items.length); let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) { const idx = i++; if (idx >= items.length) return; out[idx] = await fn(items[idx], idx); }
+  });
+  await Promise.all(workers);
+  return out;
+}
+function guessLocalIp() {
+  return new Promise(res => {
+    let done = false;
+    const fin = v => { if (done) return; done = true; res(v); };
+    setTimeout(() => fin(null), 1600);
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      pc.createDataChannel('x');
+      pc.onicecandidate = e => {
+        if (!e.candidate) return fin(null);
+        const m = /([0-9]{1,3}(?:\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
+        if (m && !m[1].startsWith('127.')) fin(m[1]);
+      };
+      pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => fin(null));
+    } catch (e) { fin(null); }
+  });
+}
+
+/* ============================ KEY TABLES ============================ */
+const SAM = {
+  POWER:'KEY_POWER', HOME:'KEY_HOME', BACK:'KEY_RETURN', UP:'KEY_UP', DOWN:'KEY_DOWN',
+  LEFT:'KEY_LEFT', RIGHT:'KEY_RIGHT', OK:'KEY_ENTER', MENU:'KEY_MENU', EXIT:'KEY_EXIT',
+  VOLUP:'KEY_VOLUP', VOLDOWN:'KEY_VOLDOWN', MUTE:'KEY_MUTE', CHUP:'KEY_CHUP', CHDOWN:'KEY_CHDOWN',
+  PLAY:'KEY_PLAY', PAUSE:'KEY_PAUSE', STOP:'KEY_STOP', REW:'KEY_REWIND', FF:'KEY_FF',
+  INFO:'KEY_INFO', GUIDE:'KEY_GUIDE', SOURCE:'KEY_SOURCE', SETTINGS:'KEY_TOOLS', SEARCH:'KEY_SEARCH',
+  RED:'KEY_RED', GREEN:'KEY_GREEN', YELLOW:'KEY_YELLOW', BLUE:'KEY_BLUE',
+  NETFLIX:'KEY_NETFLIX', YOUTUBE:'KEY_YOUTUBE', PRIME:'KEY_AMAZON',
+  0:'KEY_0',1:'KEY_1',2:'KEY_2',3:'KEY_3',4:'KEY_4',5:'KEY_5',6:'KEY_6',7:'KEY_7',8:'KEY_8',9:'KEY_9'
+};
+const LG_BTN = {
+  HOME:'HOME', BACK:'BACK', UP:'UP', DOWN:'DOWN', LEFT:'LEFT', RIGHT:'RIGHT', OK:'ENTER',
+  MENU:'MENU', EXIT:'EXIT', INFO:'INFO', GUIDE:'GUIDE', SOURCE:'INPUT_HUB',
+  VOLUP:'VOLUMEUP', VOLDOWN:'VOLUMEDOWN', MUTE:'MUTE', CHUP:'CHANNELUP', CHDOWN:'CHANNELDOWN',
+  PLAY:'PLAY', PAUSE:'PAUSE', STOP:'STOP', REW:'REWIND', FF:'FASTFORWARD',
+  RED:'RED', GREEN:'GREEN', YELLOW:'YELLOW', BLUE:'BLUE', SETTINGS:'MENU',
+  0:'0',1:'1',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9'
+};
+const LG_APP = { NETFLIX:'netflix', YOUTUBE:'youtube.leanback.v4', PRIME:'amazon', DISNEY:'com.disney.disneyplus-prod' };
+const ROKU = {
+  POWER:'Power', HOME:'Home', BACK:'Back', UP:'Up', DOWN:'Down', LEFT:'Left', RIGHT:'Right', OK:'Select',
+  MENU:'Home', EXIT:'Home', INFO:'Info', GUIDE:'Home', SETTINGS:'Home', SOURCE:'Home', SEARCH:'Search',
+  VOLUP:'VolumeUp', VOLDOWN:'VolumeDown', MUTE:'VolumeMute', CHUP:'ChannelUp', CHDOWN:'ChannelDown',
+  PLAY:'Play', PAUSE:'Play', STOP:'Back', REW:'Rev', FF:'Fwd',
+  RED:'Info', GREEN:'Info', YELLOW:'Info', BLUE:'Info',
+  0:'Lit_0',1:'Lit_1',2:'Lit_2',3:'Lit_3',4:'Lit_4',5:'Lit_5',6:'Lit_6',7:'Lit_7',8:'Lit_8',9:'Lit_9'
+};
+const ROKU_APP = { NETFLIX:12, YOUTUBE:837, PRIME:13, DISNEY:291097 };
+const FTV = {
+  POWER:'KEY_POWER', HOME:'KEY_HOME', BACK:'KEY_BACK', UP:'KEY_DPAD_UP', DOWN:'KEY_DPAD_DOWN',
+  LEFT:'KEY_DPAD_LEFT', RIGHT:'KEY_DPAD_RIGHT', OK:'KEY_DPAD_CENTER', MENU:'KEY_MENU', EXIT:'KEY_BACK',
+  INFO:'KEY_INFO', GUIDE:'KEY_GUIDE', SETTINGS:'KEY_MENU', SOURCE:'KEY_TV', SEARCH:'KEY_SEARCH',
+  VOLUP:'KEY_VOLUME_UP', VOLDOWN:'KEY_VOLUME_DOWN', MUTE:'KEY_VOLUME_MUTE',
+  CHUP:'KEY_CHANNELUP', CHDOWN:'KEY_CHANNELDOWN',
+  PLAY:'KEY_MEDIA_PLAY_PAUSE', PAUSE:'KEY_MEDIA_PLAY_PAUSE', STOP:'KEY_MEDIA_STOP',
+  REW:'KEY_MEDIA_REWIND', FF:'KEY_MEDIA_FAST_FORWARD',
+  0:'KEY_0',1:'KEY_1',2:'KEY_2',3:'KEY_3',4:'KEY_4',5:'KEY_5',6:'KEY_6',7:'KEY_7',8:'KEY_8',9:'KEY_9'
+};
+const FTV_APP = { NETFLIX:'Netflix', YOUTUBE:'YouTube', PRIME:'AmazonInstantVideo', DISNEY:'DisneyPlus' };
+const VIZ = {
+  POWER:[11,2], POWER_ON:[11,1], POWER_OFF:[11,0], HOME:[4,1], BACK:[3,6], UP:[3,1], DOWN:[3,2],
+  LEFT:[3,3], RIGHT:[3,4], OK:[3,5], MENU:[4,8], EXIT:[4,5], INFO:[4,0], GUIDE:[4,4],
+  VOLUP:[5,1], VOLDOWN:[5,0], MUTE:[5,4], CHUP:[8,1], CHDOWN:[8,2], SOURCE:[7,1],
+  PLAY:[2,1], PAUSE:[2,2], STOP:[2,4], REW:[2,3], FF:[2,5], SETTINGS:[4,8],
+  RED:[4,2], GREEN:[4,3], YELLOW:[4,6], BLUE:[4,7],
+  0:[1,0],1:[1,1],2:[1,2],3:[1,3],4:[1,4],5:[1,5],6:[1,6],7:[1,7],8:[1,8],9:[1,9]
+};
+const VIZ_APP = { NETFLIX:'2', YOUTUBE:'3', PRIME:'4', DISNEY:'5' };
+const SONY = {
+  POWER:'AAAAAQAAAAEAAAAVAw==', HOME:'AAAAAQAAAAEAAABgAw==', BACK:'AAAAAgAAAJcAAAAjAw==',
+  UP:'AAAAAQAAAAEAAAB0Aw==', DOWN:'AAAAAQAAAAEAAAB1Aw==', LEFT:'AAAAAQAAAAEAAAA0Aw==',
+  RIGHT:'AAAAAQAAAAEAAAAzAw==', OK:'AAAAAQAAAAEAAABlAw==', MENU:'AAAAAQAAAAEAAABgAw==',
+  EXIT:'AAAAAQAAAAEAAABjAw==', INFO:'AAAAAQAAAAEAAAA6Aw==', GUIDE:'AAAAAQAAAAEAAAA7Aw==',
+  SETTINGS:'AAAAAgAAAMQAAAB3Aw==', SOURCE:'AAAAAQAAAAEAAAAlAw==', SEARCH:'AAAAAgAAAJcAAAB4Aw==',
+  VOLUP:'AAAAAQAAAAEAAAASAw==', VOLDOWN:'AAAAAQAAAAEAAAATAw==', MUTE:'AAAAAQAAAAEAAAAUAw==',
+  CHUP:'AAAAAQAAAAEAAAAQAw==', CHDOWN:'AAAAAQAAAAEAAAARAw==',
+  PLAY:'AAAAAgAAAJcAAAAaAw==', PAUSE:'AAAAAgAAAJcAAAAZAw==', STOP:'AAAAAgAAAJcAAAAYAw==',
+  REW:'AAAAAgAAAJcAAAAbAw==', FF:'AAAAAgAAAJcAAAAcAw==',
+  RED:'AAAAAgAAAJcAAAAlAw==', GREEN:'AAAAAgAAAJcAAAAmAw==', YELLOW:'AAAAAgAAAJcAAAAnAw==', BLUE:'AAAAAgAAAJcAAAAkAw==',
+  NETFLIX:'AAAAAgAAABoAAAB8Aw==', YOUTUBE:'AAAAAgAAABoAAAB7Aw==',
+  0:'AAAAAQAAAAEAAAAJAw==',1:'AAAAAQAAAAEAAAAAAw==',2:'AAAAAQAAAAEAAAABAw==',3:'AAAAAQAAAAEAAAACAw==',
+  4:'AAAAAQAAAAEAAAADAw==',5:'AAAAAQAAAAEAAAAEAw==',6:'AAAAAQAAAAEAAAAFAw==',7:'AAAAAQAAAAEAAAAGAw==',
+  8:'AAAAAQAAAAEAAAAHAw==',9:'AAAAAQAAAAEAAAAIAw=='
+};
+const PHIL = {
+  POWER:'Standby', HOME:'Home', BACK:'Back', UP:'CursorUp', DOWN:'CursorDown', LEFT:'CursorLeft',
+  RIGHT:'CursorRight', OK:'Confirm', MENU:'Menu', EXIT:'Back', INFO:'Info', GUIDE:'Info',
+  SETTINGS:'Options', SOURCE:'Source', SEARCH:'Search',
+  VOLUP:'VolumeUp', VOLDOWN:'VolumeDown', MUTE:'Mute', CHUP:'ChannelStepUp', CHDOWN:'ChannelStepDown',
+  PLAY:'Play', PAUSE:'Pause', STOP:'Stop', REW:'Rewind', FF:'FastForward',
+  RED:'Red', GREEN:'Green', YELLOW:'Yellow', BLUE:'Blue',
+  0:'0',1:'1',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9'
+};
+const PANA = {
+  POWER:'NRC_POWER-ONOFF', HOME:'NRC_HOME-ONOFF', BACK:'NRC_RETURN-ONOFF', UP:'NRC_UP-ONOFF',
+  DOWN:'NRC_DOWN-ONOFF', LEFT:'NRC_LEFT-ONOFF', RIGHT:'NRC_RIGHT-ONOFF', OK:'NRC_ENTER-ONOFF',
+  MENU:'NRC_MENU-ONOFF', EXIT:'NRC_CANCEL-ONOFF', INFO:'NRC_INFO-ONOFF', GUIDE:'NRC_GUIDE-ONOFF',
+  SETTINGS:'NRC_MENU-ONOFF', SOURCE:'NRC_TV-ONOFF', SEARCH:'NRC_SUBMENU-ONOFF',
+  VOLUP:'NRC_VOLUP-ONOFF', VOLDOWN:'NRC_VOLDOWN-ONOFF', MUTE:'NRC_MUTE-ONOFF',
+  CHUP:'NRC_CH_UP-ONOFF', CHDOWN:'NRC_CH_DOWN-ONOFF',
+  PLAY:'NRC_PLAY-ONOFF', PAUSE:'NRC_PAUSE-ONOFF', STOP:'NRC_STOP-ONOFF',
+  REW:'NRC_REW-ONOFF', FF:'NRC_FF-ONOFF',
+  RED:'NRC_RED-ONOFF', GREEN:'NRC_GREEN-ONOFF', YELLOW:'NRC_YELLOW-ONOFF', BLUE:'NRC_BLUE-ONOFF',
+  0:'NRC_0-ONOFF',1:'NRC_1-ONOFF',2:'NRC_2-ONOFF',3:'NRC_3-ONOFF',4:'NRC_4-ONOFF',
+  5:'NRC_5-ONOFF',6:'NRC_6-ONOFF',7:'NRC_7-ONOFF',8:'NRC_8-ONOFF',9:'NRC_9-ONOFF'
+};
+
+/* ============================== DRIVERS ============================= */
+const LG_PERMS = ['TEST_SECURE','CONTROL_INPUT_TEXT','CONTROL_MOUSE_AND_KEYBOARD','READ_INSTALLED_APPS',
+  'READ_LGE_SDX','READ_NOTIFICATIONS','SEARCH','WRITE_SETTINGS','WRITE_NOTIFICATION_ALERT',
+  'CONTROL_POWER','READ_CURRENT_CHANNEL','READ_RUNNING_APPS','READ_UPDATE_INFO',
+  'UPDATE_FROM_REMOTE_APP','READ_POWER_STATE','READ_VOLUME_STATE','WRITE_CURRENT_CHANNEL',
+  'CONTROL_INPUT_TV','CONTROL_AUDIO','CONTROL_DISPLAY','CONTROL_INPUT_MEDIA_PLAYBACK',
+  'CONTROL_TV_POWER','CONTROL_INPUT_JOYSTICK','CONTROL_INPUT_MEDIA_RECORDING'];
+
+const DRIVERS = {
+
+  /* ------------------------------ SAMSUNG ------------------------------ */
+  samsung: {
+    label: 'Samsung Smart TV (Tizen 2016+)',
+    port: 8001, probe: 'ws',
+    note: 'Accept the connection popup on the TV.',
+    async connect(ip) {
+      const name = b64('Venice Universal Remote');
+      const token = localStorage.getItem(tokKey('samsung', ip)) || '';
+      const url = `ws://${ip}:8001/api/v2/channels/samsung.remote.control?name=${name}${token ? '&token=' + token : ''}`;
+      const ws = await openWs(url, 8000);
+      const h = { ip, ws };
+      ws.onmessage = e => {
+        let d; try { d = JSON.parse(e.data); } catch (err) { return; }
+        if (d.data && d.data.token) { localStorage.setItem(tokKey('samsung', ip), d.data.token); log('Samsung token saved'); }
+        if (d.event === 'ms.channel.unauthorized') { localStorage.removeItem(tokKey('samsung', ip)); log('Samsung token rejected — reconnect'); }
+      };
+      ws.onclose = () => log('Samsung socket closed');
+      return h;
+    },
+    async send(h, k) {
+      if (!h.ws || h.ws.readyState !== 1) throw new Error('socket closed');
+      const code = SAM[k]; if (!code) return log('no mapping for', k);
+      h.ws.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: 'Click', DataOfCmd: code, Option: 'false', TypeOfRemote: 'SendRemoteKey' } }));
+    },
+    async text(h, s) {
+      if (!h.ws || h.ws.readyState !== 1) throw new Error('socket closed');
+      h.ws.send(JSON.stringify({ method: 'ms.remote.control', params: { Cmd: 'InputString', DataOfCmd: s, TypeOfRemote: 'SendInputString' } }));
+    },
+    close(h) { try { h.ws.close(); } catch (e) {} }
+  },
+
+  /* -------------------------------- LG -------------------------------- */
+  lg: {
+    label: 'LG Smart TV (webOS 2014+)',
+    port: 3000, probe: 'ws',
+    note: 'Accept the pairing prompt on the TV.',
+    async connect(ip) {
+      const ws = await openWs(`ws://${ip}:3000`, 8000);
+      const saved = localStorage.getItem(tokKey('lg', ip));
+      const h = { ip, ws, seq: 0, pending: new Map(), pointer: null, queue: [], registered: false };
+      const manifest = {
+        manifestVersion: 1, appVersion: '1.1',
+        signed: { created: '20240101', appId: 'com.venice.remote', vendorId: 'com.venice',
+          localizedAppNames: { '': 'Venice Remote' }, localizedVendorNames: { '': 'Venice' }, permissions: LG_PERMS },
+        permissions: LG_PERMS
+      };
+      ws.onmessage = e => {
+        let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+        if (m.type === 'registered') {
+          h.registered = true;
+          if (m.payload && m.payload['client-key']) { localStorage.setItem(tokKey('lg', ip), m.payload['client-key']); log('LG client-key saved'); }
+          DRIVERS.lg.request(h, 'ssap://com.webos.service.networkinput/getPointerInputSocket').then(r => {
+            const path = r && r.payload && r.payload.socketPath; if (!path) return;
+            const p = new WebSocket(path);
+            p.onopen = () => { h.pointer = p; h.queue.splice(0).forEach(l => p.send(l)); log('LG pointer socket ready'); };
+            p.onerror = () => log('LG pointer socket failed');
+          }).catch(() => log('LG pointer socket unavailable'));
+        }
+        if (m.type === 'error') log('LG error:', m.error);
+        if (m.id && h.pending.has(m.id)) { h.pending.get(m.id)(m); h.pending.delete(m.id); }
+      };
+      ws.onclose = () => { h.registered = false; log('LG socket closed'); };
+      await new Promise((res, rej) => {
+        const to = setTimeout(() => rej(new Error('LG pairing timed out — accept on TV')), 45000);
+        const iv = setInterval(() => { if (h.registered) { clearInterval(iv); clearTimeout(to); res(); } }, 150);
+        ws.send(JSON.stringify({ id: 'reg_0', type: 'register', payload: {
+          forcePairing: false, pairingType: 'PROMPT', 'client-key': saved || undefined, manifest, permissions: LG_PERMS } }));
+      });
+      return h;
+    },
+    request(h, uri, payload) {
+      return new Promise((res, rej) => {
+        if (!h.ws || h.ws.readyState !== 1) return rej(new Error('socket closed'));
+        const id = 'r' + (++h.seq);
+        h.pending.set(id, res);
+        h.ws.send(JSON.stringify({ id, type: 'request', uri, payload: payload || {} }));
+        setTimeout(() => { if (h.pending.has(id)) { h.pending.delete(id); rej(new Error('timeout ' + uri)); } }, 8000);
+      });
+    },
+    btn(h, name) {
+      const line = `type:button\nname:${name}\n\n`;
+      if (h.pointer && h.pointer.readyState === 1) h.pointer.send(line); else h.queue.push(line);
+    },
+    async send(h, k) {
+      if (k === 'POWER') { await this.request(h, 'ssap://system/turnOff').catch(() => {}); return; }
+      if (LG_APP[k]) { await this.request(h, 'ssap://system.launcher/launch', { id: LG_APP[k] }).catch(e => log('launch failed:', k)); return; }
+      const b = LG_BTN[k]; if (!b) return log('no mapping for', k);
+      this.btn(h, b);
+    },
+    async text(h, s) {
+      await this.request(h, 'ssap://com.webos.service.ime/insertText', { text: s, replace: 0 }).catch(() => {});
+    },
+    close(h) { try { h.ws.close(); } catch (e) {} try { h.pointer && h.pointer.close(); } catch (e) {} }
+  },
+
+  /* ------------------------------- ROKU ------------------------------- */
+  roku: {
+    label: 'Roku TV / Roku OS (TCL, Hisense, Sharp, onn, Element)',
+    port: 8060, probe: 'http',
+    note: 'Enable Settings ▸ System ▸ Advanced ▸ Control by mobile apps ▸ Network access = Enabled.',
+    async connect(ip) {
+      const ok = await probeHttp(ip, 8060, 2500);
+      if (!ok) throw new Error('no ECP response on port 8060');
+      return { ip, base: `http://${ip}:8060` };
+    },
+    async send(h, k) {
+      if (ROKU_APP[k]) return fetch(`${h.base}/launch/${ROKU_APP[k]}`, { method: 'POST', mode: 'no-cors' });
+      const code = ROKU[k]; if (!code) return log('no mapping for', k);
+      await fetch(`${h.base}/keypress/${code}`, { method: 'POST', mode: 'no-cors' });
+    },
+    async text(h, s) { for (const ch of s) await fetch(`${h.base}/keypress/Lit_${encodeURIComponent(ch)}`, { method: 'POST', mode: 'no-cors' }); },
+    close() {}
+  },
+
+  /* ------------------------------ FIRE TV ----------------------------- */
+  firetv: {
+    label: 'Amazon Fire TV / Stick / Cube (needs bridge)',
+    port: 8008, probe: 'http', probePorts: [8008, 8009],
+    needsExtra: true,
+    extraLabel: 'Bridge IP (computer running firetv-bridge.js)',
+    extraPlaceholder: '192.168.1.10',
+    note: 'Fire TV speaks raw TCP on 55443, which browsers cannot reach. Run firetv-bridge.js on a computer on this Wi-Fi and enter that computer\'s IP here. Scanning is best-effort for Fire TV — type the TV IP if nothing is found.',
+    async connect(ip, bridge) {
+      if (!bridge) throw new Error('bridge IP required — run firetv-bridge.js first');
+      const parts = bridge.split(':');
+      const bHost = parts[0].trim();
+      const bPort = (parts[1] || '8080').trim();
+      const ws = await openWs(`ws://${bHost}:${bPort}/${ip}`, 8000);
+      const h = { ip, ws };
+      ws.onmessage = e => {
+        const t = String(e.data);
+        if (t.startsWith('OK') || t.startsWith('ERR')) log('bridge:', t.trim());
+      };
+      ws.onclose = () => log('bridge socket closed');
+      return h;
+    },
+    async send(h, k) {
+      if (!h.ws || h.ws.readyState !== 1) throw new Error('bridge socket closed');
+      if (FTV_APP[k]) return h.ws.send(JSON.stringify({ type: 'app', name: FTV_APP[k] }));
+      const code = FTV[k]; if (!code) return log('no mapping for', k);
+      h.ws.send(JSON.stringify({ type: 'key', key: code }));
+    },
+    async text(h, s) {
+      if (!h.ws || h.ws.readyState !== 1) throw new Error('bridge socket closed');
+      h.ws.send(JSON.stringify({ type: 'text', text: s }));
+    },
+    close(h) { try { h.ws.close(); } catch (e) {} }
+  },
+
+  /* ------------------------------ VIZIO ------------------------------- */
+  vizio: {
+    label: 'Vizio SmartCast', port: 7345, probe: 'https',
+    needsExtra: true, extraLabel: 'PIN shown on TV', extraPlaceholder: '1234',
+    note: 'Open https://TV-IP:7345 once and accept the certificate, then Connect.',
+    async connect(ip, pin) {
+      const base = `https://${ip}:7345`;
+      const start = await fetch(`${base}/pairing/start`, { method: 'GET', cache: 'no-store' }).then(r => r.json());
+      const item = start.ITEM || start.item || {};
+      const challenge = item.PAIRING_KEY || item.pairing_key;
+      log('Vizio pairing type:', item.PAIRING_TYPE || '?');
+      if (!challenge) throw new Error('Vizio pairing/start returned no challenge');
+      const enc = new TextEncoder();
+      const sha1hex = async s => {
+        const buf = await crypto.subtle.digest('SHA-1', enc.encode(s));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      };
+      const pinHash = await sha1hex(String(pin));
+      const responseValue = btoa(await sha1hex(`${challenge}:${pinHash}`));
+      if (!localStorage.getItem('uvr.vizio.dev')) localStorage.setItem('uvr.vizio.dev', crypto.randomUUID());
+      const devId = localStorage.getItem('uvr.vizio.dev');
+      const pair = await fetch(`${base}/pairing/pair`, {
+        method: 'PUT', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ DEVICE_ID: devId, CHALLENGE_TYPE: item.CHALLENGE_TYPE ?? 1, RESPONSE_VALUE: responseValue, NAME: 'Venice Remote' })
+      }).then(r => r.json());
+      const token = (pair.ITEM && (pair.ITEM.AUTH_TOKEN || pair.ITEM.auth_token)) || pair.AUTH_TOKEN;
+      if (!token) throw new Error('Vizio pairing failed — wrong PIN?');
+      localStorage.setItem(tokKey('vizio', ip), token);
+      log('Vizio paired');
+      return { ip, base, token };
+    },
+    async send(h, k) {
+      if (VIZ_APP[k]) return fetch(`${h.base}/launch/app`, { method: 'PUT', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', AUTH: h.token },
+        body: JSON.stringify({ id: '1', apps: [{ nameSpace: VIZ_APP[k] }] }) });
+      const c = VIZ[k]; if (!c) return log('no mapping for', k);
+      await fetch(`${h.base}/key_command/`, { method: 'PUT', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', AUTH: h.token },
+        body: JSON.stringify({ KEYLIST: [{ CODESET: c[0], CODE: c[1], ACTION: 'KEYPRESS' }] }) });
+    },
+    async text() { log('Vizio: text input not supported'); },
+    close() {}
+  },
+
+  /* ------------------------------- SONY ------------------------------- */
+  sony: {
+    label: 'Sony BRAVIA', port: 80, probe: 'http',
+    needsExtra: true, extraLabel: 'Pre-shared key (PSK)', extraPlaceholder: '1234',
+    note: 'Enable Settings ▸ Network ▸ Home network ▸ IP control ▸ Authentication ▸ "Normal and Pre-Shared Key".',
+    async connect(ip, psk) { return { ip, psk }; },
+    async send(h, k) {
+      const code = SONY[k]; if (!code) return log('no mapping for', k);
+      const body = `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:X_SendIRCC xmlns:u="urn:schemas-sony-com:service:IRCC:1"><IRCCCode>${code}</IRCCCode></u:X_SendIRCC></s:Body></s:Envelope>`;
+      const headers = { 'Content-Type': 'text/xml; charset=UTF-8', SOAPACTION: '"urn:schemas-sony-com:service:IRCC:1#X_SendIRCC"' };
+      if (h.psk) headers['X-Auth-PSK'] = h.psk;
+      await fetch(`http://${h.ip}/sony/IRCC`, { method: 'POST', headers, body });
+    },
+    async text() { log('Sony: use the on-screen keyboard'); },
+    close() {}
+  },
+
+  /* ------------------------------ PHILIPS ----------------------------- */
+  philips: {
+    label: 'Philips TV (jointSPACE)', port: 1925, probe: 'http',
+    note: '2014+ Philips TVs with the network remote enabled.',
+    async connect(ip) { return { ip, base: `http://${ip}:1925/6` }; },
+    async send(h, k) {
+      const key = PHIL[k]; if (!key) return log('no mapping for', k);
+      await fetch(`${h.base}/input/key`, { method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+    },
+    async text(h, s) {
+      for (const ch of s) await fetch(`${h.base}/input/key`, { method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: ch }) });
+    },
+    close() {}
+  },
+
+  /* ----------------------------- PANASONIC ---------------------------- */
+  panasonic: {
+    label: 'Panasonic VIERA', port: 55000, probe: 'http',
+    note: 'Basic support. Some 2013+ models need key encryption — if nothing happens, that model is unsupported.',
+    async connect(ip) { return { ip }; },
+    async send(h, k) {
+      const key = PANA[k]; if (!key) return log('no mapping for', k);
+      const body = `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:X_SendKey xmlns:u="urn:panasonic-com:service:p00NetworkControl:1"><X_KeyEvent>${key}</X_KeyEvent></u:X_SendKey></s:Body></s:Envelope>`;
+      await fetch(`http://${h.ip}:55000/nrc/control_0`, { method: 'POST',
+        headers: { 'Content-Type': 'text/xml; charset=UTF-8', SOAPACTION: '"urn:panasonic-com:service:p00NetworkControl:1#X_SendKey"' },
+        body });
+    },
+    async text() {},
+    close() {}
+  },
+
+  /* ------------------------------ GENERIC ----------------------------- */
+  generic: {
+    label: 'Other — generic WebSocket',
+    port: 8001, probe: 'ws',
+    needsExtra: true, extraLabel: 'WebSocket port', extraPlaceholder: '8001',
+    note: 'Opens ws://TV-IP:PORT/ and sends each key as a plain text frame.',
+    async connect(ip, port) { return { ip, ws: await openWs(`ws://${ip}:${port || 8001}/`, 7000) }; },
+    async send(h, k) { if (h.ws.readyState !== 1) throw new Error('socket closed'); h.ws.send(k); },
+    async text(h, s) { h.ws.send(s); },
+    close(h) { try { h.ws.close(); } catch (e) {} }
+  }
+};
+
+/* ============================== APP STATE =========================== */
+const state = { dev: null, scanning: false };
+
+/* ------------------------------- UI setup --------------------------- */
+const brandSel = $('#brand'), ipInput = $('#ip'), ipLabel = $('#ipLabel');
+const extraWrap = $('#extraWrap'), extraInput = $('#extra');
+const brandNote = $('#brandNote'), statusPill = $('#statusPill'), devLabel = $('#devLabel'), banner = $('#banner');
+
+Object.entries(DRIVERS).forEach(([k, d]) => {
+  const o = document.createElement('option'); o.value = k; o.textContent = d.label; brandSel.appendChild(o);
+});
+brandSel.value = localStorage.getItem('uvr.brand') || 'samsung';
+ipInput.value = localStorage.getItem('uvr.ip') || '';
+syncBrand();
+
+function syncBrand() {
+  const d = DRIVERS[brandSel.value];
+  brandNote.textContent = d.note || '';
+  ipLabel.textContent = brandSel.value === 'firetv' ? 'Fire TV IP address' : 'TV IP address';
+  if (d.needsExtra) {
+    extraWrap.classList.remove('hidden');
+    $('#extraLabel').textContent = d.extraLabel;
+    extraInput.placeholder = d.extraPlaceholder || '';
+    extraInput.value = localStorage.getItem(tokKey(brandSel.value, ipInput.value + '.extra')) || '';
+  } else extraWrap.classList.add('hidden');
+}
+brandSel.onchange = () => { localStorage.setItem('uvr.brand', brandSel.value); syncBrand(); };
+ipInput.oninput = () => { localStorage.setItem('uvr.ip', ipInput.value); syncBrand(); };
+extraInput.oninput = () => localStorage.setItem(tokKey(brandSel.value, ipInput.value + '.extra'), extraInput.value);
+
+function setStatus(kind, brand, ip) {
+  statusPill.className = 'pill ' + (kind === 'connected' ? 'on' : 'off');
+  statusPill.textContent = kind === 'connected' ? 'connected' : kind === 'connecting' ? 'connecting…' : 'not connected';
+  devLabel.textContent = brand ? `${DRIVERS[brand].label} · ${ip}` : 'no device';
+}
+function showBanner(html) { banner.innerHTML = html; banner.classList.remove('hidden'); }
+function hideBanner() { banner.classList.add('hidden'); }
+
+/* ------------------------------- connect ---------------------------- */
+$('#connectBtn').onclick = async () => {
+  const brand = brandSel.value, ip = ipInput.value.trim(), d = DRIVERS[brand];
+  if (!ip) { showBanner('Enter your TV\'s IP address, or tap <b>Find my TV</b>.'); return; }
+  const extra = extraInput.value.trim();
+  if (d.needsExtra) {
+    if (!extra && brand !== 'generic') { showBanner('Enter the ' + d.extraLabel + ' first.'); return; }
+    localStorage.setItem(tokKey(brand, ip + '.extra'), extra);
+  }
+  setStatus('connecting', brand, ip);
+  log('connecting to', d.label, ip);
+  try {
+    const handle = await d.connect(ip, extra);
+    state.dev = { brand, ip, handle };
+    setStatus('connected', brand, ip);
+    $('#remote').classList.remove('hidden');
+    hideBanner();
+    log('✔ connected');
+  } catch (e) {
+    log('✘ ' + e.message);
+    setStatus('off', brand, ip);
+    if (brand === 'firetv') {
+      showBanner('Fire TV needs the bridge running. On a computer on this Wi-Fi: ' +
+        '<code>node firetv-bridge.js ' + ip + '</code> — then put that computer\'s IP in the Bridge IP field.');
+    } else mixedBanner(d);
+  }
+};
+
+$('#forgetBtn').onclick = () => {
+  if (state.dev) { DRIVERS[state.dev.brand].close(state.dev.handle); log('disconnected'); }
+  state.dev = null; setStatus('off'); $('#remote').classList.add('hidden');
+  localStorage.removeItem('uvr.ip'); ipInput.value = '';
+};
+
+/* -------------------------------- scan ------------------------------ */
+$('#scanBtn').onclick = async () => {
+  if (state.scanning) return;
+  state.scanning = true; $('#scanBtn').disabled = true;
+  const d = DRIVERS[brandSel.value];
+  log('--- scanning for', d.label, '---');
+  const mine = await guessLocalIp();
+  if (mine) log('your phone looks like', mine);
+  const bases = new Set();
+  if (mine) bases.add(mine.split('.').slice(0, 3).join('.'));
+  ['192.168.0','192.168.1','192.168.2','192.168.4','192.168.8','192.168.10','192.168.29',
+   '192.168.50','192.168.68','192.168.88','192.168.100','192.168.178','10.0.0','10.0.1','10.1.1','172.16.0']
+    .forEach(b => bases.add(b));
+  const list = [...bases];
+
+  // phase 1 — find live subnets by probing the gateway
+  const live = [];
+  await pMap(list, async b => {
+    if (await probeDevice(`${b}.1`, d, 700)) { live.push(b); log('subnet ' + b + '.x responds'); }
+  }, 16);
+
+  // phase 2 — sweep hosts
+  const targets = (live.length ? live : list).flatMap(b => {
+    const a = []; for (let i = 2; i <= 254; i++) a.push(`${b}.${i}`); return a;
+  });
+  const found = [];
+  await pMap(targets, async ip => {
+    if (await probeDevice(ip, d, 600)) { found.push(ip); log('found → ' + ip); }
+  }, 40);
+
+  if (found.length) {
+    ipInput.value = found[0]; localStorage.setItem('uvr.ip', found[0]); syncBrand();
+    showBanner(`Found <b>${found.length}</b> device${found.length > 1 ? 's' : ''}: ${found.join(', ')}. Tap Connect.`);
+  } else {
+    log('no devices found');
+    if (brandSel.value === 'firetv') showBanner('Scanning is best-effort for Fire TV (it looks for DIAL on 8008/8009). Type the TV IP by hand — you can find it in the Fire TV: Settings ▸ My Fire TV ▸ About ▸ Network.');
+    else mixedBanner(d, true);
+  }
+  state.scanning = false; $('#scanBtn').disabled = false;
+};
+
+/* --------------------------- mixed-content help --------------------- */
+function mixedBanner(d, scanMode) {
+  if (location.protocol !== 'https:') return;
+  showBanner(
+    `<b>${scanMode ? 'Nothing answered' : 'Could not reach the TV'}.</b> Most likely your browser is blocking the ` +
+    `insecure local connection from this HTTPS page.<br><br>` +
+    `<b>Chrome on Android:</b> tap the sliders/lock icon in the address bar → <b>Permissions</b> (or Site settings) → ` +
+    `<b>Insecure content</b> → <b>Allow</b>, then reload. On newer Chrome just tap <b>Allow</b> on the ` +
+    `"local network access" prompt.<br><br>` +
+    `<b>Chrome on desktop:</b> lock icon → Site settings → Insecure content → Allow.<br><br>` +
+    `<b>Safari:</b> Settings → Safari → Advanced → enable "Allow insecure content" for this site.<br><br>` +
+    `Also check: phone and TV on the <b>same</b> Wi-Fi (not a guest network), and router "AP isolation" is off.`
+  );
+}
+
+/* ------------------------------ sending ----------------------------- */
+async function sendKey(k) {
+  if (!state.dev) return;
+  buzz();
+  try {
+    await DRIVERS[state.dev.brand].send(state.dev.handle, k);
+  } catch (e) {
+    log('send failed (' + k + '): ' + e.message);
+    const { brand, ip } = state.dev, d = DRIVERS[brand];
+    try {
+      const handle = await d.connect(ip, extraInput.value.trim());
+      state.dev.handle = handle;
+      await d.send(handle, k);
+      log('reconnected and resent');
+    } catch (e2) { log('reconnect failed: ' + e2.message); setStatus('off', brand, ip); }
+  }
+}
+
+$$('#remote [data-k]').forEach(btn => {
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); sendKey(btn.dataset.k); });
+});
+$('#sendTxt').onclick = async () => {
+  const v = $('#txt').value; if (!v || !state.dev) return;
+  await DRIVERS[state.dev.brand].text(state.dev.handle, v).catch(e => log(e.message));
+  log('sent text:', v);
+};
+$('#clearLog').onclick = () => logBox.innerHTML = '';
+
+/* ------------------------------ lifecycle --------------------------- */
+window.addEventListener('online', () => log('network back online'));
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !state.dev) return;
+  const h = state.dev.handle;
+  if (h && h.ws && h.ws.readyState > 1) { log('socket died in background — reconnecting'); sendKey('OK'); }
+});
+
+log('ready. pick a brand, then Find my TV or Connect.');
+</script>
+</body>
+</html>
